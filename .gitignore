@@ -1,0 +1,18 @@
+# ローカル設定（ユーザー個別）
+config.json
+
+# ログ
+*.log
+
+# 生成物
+__pycache__/
+*.pyc
+*.pyo
+
+# PowerShell 内部スクリプト（インストーラ用 .ps1 は除外しない）
+_register_*.ps1
+
+# ビルド成果物
+build/
+dist/
+*.egg-info/

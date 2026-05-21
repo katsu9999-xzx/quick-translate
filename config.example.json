@@ -1,0 +1,12 @@
+{
+  "hotkey": "alt+q",
+  "screenshot_hotkey": "ctrl+shift+s",
+  "target_lang": "ja",
+  "source_lang": "auto",
+  "ocr_lang": "en",
+  "popup_timeout_ms": 0,
+  "max_width_px": 460,
+  "font_family": "Yu Gothic UI",
+  "translated_font_size": 12,
+  "original_font_size": 9
+}
