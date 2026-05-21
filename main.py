@@ -550,34 +550,103 @@ class App:
 
             tk.Label(
                 dlg,
-                text=f"{title}\n例: ctrl+shift+t, alt+q, ctrl+alt+space",
+                text=title,
                 bg="#1e1e1e",
                 fg="#ffffff",
-                font=(self.config["font_family"], 10),
+                font=(self.config["font_family"], 11, "bold"),
                 padx=12,
-                pady=8,
-                justify="left",
+                pady=(10, 4),
+            ).pack()
+
+            tk.Label(
+                dlg,
+                text="「キー記録」ボタンを押して、登録したいキーをそのまま押してください\n"
+                     "(例: Ctrl+Shift+T / Alt+Q / Ctrl+Alt+Space)",
+                bg="#1e1e1e",
+                fg="#bbbbbb",
+                font=(self.config["font_family"], 9),
+                padx=12,
+                pady=(0, 6),
+                justify="center",
             ).pack()
 
             var = tk.StringVar(value=self.config[key_name])
-            entry = tk.Entry(dlg, textvariable=var, font=(self.config["font_family"], 11), width=32)
-            entry.pack(padx=12, pady=4)
-            entry.focus_set()
+            entry = tk.Entry(
+                dlg, textvariable=var,
+                font=(self.config["font_family"], 13, "bold"),
+                width=28, justify="center",
+                bg="#2a2a2a", fg="#ffffff", insertbackground="#ffffff",
+                relief="flat",
+            )
+            entry.pack(padx=12, pady=6, ipady=6)
+
+            status_var = tk.StringVar(value="現在: " + self.config[key_name])
+            tk.Label(dlg, textvariable=status_var, bg="#1e1e1e", fg="#888888",
+                     font=(self.config["font_family"], 9)).pack(pady=(0, 4))
 
             msg_var = tk.StringVar(value="")
             tk.Label(dlg, textvariable=msg_var, bg="#1e1e1e", fg="#ff8888",
                      font=(self.config["font_family"], 9)).pack(pady=(0, 4))
 
+            state = {"recording": False}
+
+            def start_record():
+                if state["recording"]:
+                    return
+                state["recording"] = True
+                status_var.set("⏺ キーを押してください... (Esc でキャンセル)")
+                msg_var.set("")
+                entry.config(state="disabled")
+                rec_btn.config(text="記録中…", state="disabled")
+                apply_btn.config(state="disabled")
+                # 既存ホットキーを一時解除して競合回避
+                self._suspend_hotkeys()
+
+                def _read():
+                    captured = None
+                    err = None
+                    try:
+                        captured = keyboard.read_hotkey(suppress=False)
+                    except Exception as e:
+                        err = str(e)
+                    self.popup_manager.root.after(0, lambda: _done(captured, err))
+
+                def _done(hk, err):
+                    # 復帰: ボタン・入力欄・既存ホットキー
+                    state["recording"] = False
+                    try:
+                        entry.config(state="normal")
+                    except Exception:
+                        pass
+                    try:
+                        rec_btn.config(text="キー記録", state="normal")
+                        apply_btn.config(state="normal")
+                    except Exception:
+                        pass
+                    self.register_hotkeys()
+                    if err:
+                        msg_var.set(f"記録失敗: {err}")
+                        status_var.set("現在: " + var.get())
+                        return
+                    if not hk or hk.lower() in ("esc", "escape"):
+                        status_var.set("キャンセルされました — 現在: " + var.get())
+                        return
+                    var.set(hk)
+                    status_var.set("✔ 記録: " + hk)
+
+                threading.Thread(target=_read, daemon=True).start()
+
             def apply(_e=None):
+                if state["recording"]:
+                    return
                 v = var.get().strip().lower()
                 if not v:
                     msg_var.set("空にはできません")
                     return
-                # 危険なホットキー (修飾なし or shift のみ) を弾く
                 parts = [p.strip() for p in v.replace("-", "+").split("+")]
                 mods = {p for p in parts if p in ("ctrl", "alt", "win", "windows", "cmd")}
                 if not mods:
-                    msg_var.set("Ctrl/Alt/Win いずれかの修飾キーを含めてください")
+                    msg_var.set("Ctrl / Alt / Win いずれかの修飾キーを含めてください")
                     return
                 try:
                     h = keyboard.add_hotkey(v, lambda: None)
@@ -591,13 +660,28 @@ class App:
                 dlg.destroy()
 
             btn = tk.Frame(dlg, bg="#1e1e1e")
-            btn.pack(pady=8)
-            tk.Button(btn, text="適用", width=10, command=apply).pack(side="left", padx=4)
-            tk.Button(btn, text="キャンセル", width=10, command=dlg.destroy).pack(side="left", padx=4)
+            btn.pack(pady=(4, 10), padx=12, fill="x")
+            rec_btn = tk.Button(btn, text="キー記録", width=12, command=start_record)
+            rec_btn.pack(side="left", padx=4)
+            apply_btn = tk.Button(btn, text="適用", width=10, command=apply)
+            apply_btn.pack(side="left", padx=4)
+            tk.Button(btn, text="キャンセル", width=10, command=dlg.destroy).pack(side="right", padx=4)
+
             dlg.bind("<Return>", apply)
-            dlg.bind("<Escape>", lambda e: dlg.destroy())
+            dlg.bind("<Escape>", lambda e: (None if state["recording"] else dlg.destroy()))
 
         self.popup_manager.schedule(_open)
+
+    def _suspend_hotkeys(self):
+        """記録中のみホットキーを一時解除 (記録後 register_hotkeys で復活)"""
+        for handle in (self._text_handle, self._shot_handle):
+            if handle is not None:
+                try:
+                    keyboard.remove_hotkey(handle)
+                except Exception:
+                    pass
+        self._text_handle = None
+        self._shot_handle = None
 
     def change_text_hotkey(self, _i=None, _it=None):
         self._hotkey_dialog("hotkey", "テキスト翻訳ホットキー")
