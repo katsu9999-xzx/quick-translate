@@ -23,6 +23,7 @@ $FILES = @(
   "start.bat",
   "start_admin.bat",
   "stop.bat",
+  "install_ocr_langs.ps1",
   "icon.ico",
   "README.md",
   "LICENSE"

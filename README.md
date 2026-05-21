@@ -79,10 +79,30 @@ install.bat
 
 ホットキー記法: `ctrl+shift+t`, `alt+q`, `ctrl+alt+space`, `f9` など。
 
+## OCR について (スクショ翻訳)
+
+スクショ翻訳には Windows 標準 OCR の言語パックが必要です。
+
+### 簡単導入 (推奨)
+
+トレイの「訳」アイコンを右クリック → **「OCR 言語パックを導入…」** をクリック → UAC「はい」 → 自動で英語＋日本語パックがインストールされます。
+
+### 手動導入
+
+管理者 PowerShell で:
+```powershell
+Add-WindowsCapability -Online -Name "Language.OCR~~~en-US~0.0.1.0"
+Add-WindowsCapability -Online -Name "Language.OCR~~~ja-JP~0.0.1.0"
+```
+
+### 自動フォールバック
+
+`ocr_lang` で指定した言語がインストールされていない場合、利用可能な別の言語に自動的にフォールバックします（`ocr_lang: auto` で先頭の利用可能言語を使う）。
+
 ## トラブルシューティング
 
-- **ホットキーが効かない**: `keyboard` ライブラリは通常権限で動くが、対象アプリが管理者権限の場合は本ツールも管理者権限で起動が必要。
-- **OCR が空文字を返す**: 対象範囲を広めに取る。日本語など特定言語は `OCR言語` を該当コード (例: `ja`, `zh-Hans`) に変更し、Windows設定で該当言語パックを導入。
+- **ホットキーが効かない**: `keyboard` ライブラリは通常権限で動くが、対象アプリが管理者権限の場合は本ツールも管理者権限で起動が必要 (`start_admin.bat` または同梱の `install_ocr_langs.ps1` 経由)。
+- **OCR が空文字 / `[OCR 言語パックが入っていません]`**: 上記「OCR について」を参照。
 - **翻訳が失敗**: ネットワーク接続確認。Google 翻訳の非公式エンドポイントを使用。
 - **ログ**: `quick-translate.log` を参照
 

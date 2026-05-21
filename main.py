@@ -175,27 +175,73 @@ def get_selected_text() -> str:
     return text
 
 
+def get_available_ocr_langs() -> list[str]:
+    """Windows OCR で利用可能な言語タグ一覧を取得 (例: ['ja', 'en-US'])"""
+    if not WINOCR_AVAILABLE:
+        return []
+    try:
+        from winrt.windows.media.ocr import OcrEngine  # type: ignore
+        return [l.language_tag for l in OcrEngine.available_recognizer_languages]
+    except Exception as e:
+        log(f"利用可能なOCR言語取得失敗: {e}")
+        return []
+
+
+def _pick_ocr_lang(requested: str, available: list[str]) -> "str | None":
+    """ユーザー指定言語に最も近い利用可能な言語タグを選択"""
+    if not available:
+        return None
+    req = (requested or "").strip().lower()
+    # 'auto' または空 → 先頭
+    if req in ("", "auto"):
+        return available[0]
+    # 完全一致
+    for tag in available:
+        if tag.lower() == req:
+            return tag
+    # プレフィックス一致 (req='en' に対し 'en-US' を受容)
+    for tag in available:
+        if tag.lower().startswith(req + "-") or req.startswith(tag.lower() + "-"):
+            return tag
+    # ベース言語一致 (req='ja-JP' に対し 'ja' を受容)
+    req_base = req.split("-")[0]
+    for tag in available:
+        if tag.lower().split("-")[0] == req_base:
+            return tag
+    # フォールバック: 先頭
+    return available[0]
+
+
 def ocr_image(img: Image.Image, lang: str = "en") -> str:
-    """Windows 標準 OCR でテキスト抽出"""
+    """Windows 標準 OCR でテキスト抽出。指定言語パック不在時は自動フォールバック"""
     if not WINOCR_AVAILABLE:
         return "[OCR ライブラリが利用できません]"
+
+    available = get_available_ocr_langs()
+    if not available:
+        return (
+            "[OCR 言語パックが入っていません]\n"
+            "システムトレイ『訳』アイコン → 『OCR 言語パックを導入』をクリックして導入してください\n"
+            "(または管理者 PowerShell で\n"
+            '  Add-WindowsCapability -Online -Name "Language.OCR~~~en-US~0.0.1.0"\n'
+            "  Add-WindowsCapability -Online -Name "
+            '"Language.OCR~~~ja-JP~0.0.1.0"\n'
+            "を実行)"
+        )
+
+    chosen = _pick_ocr_lang(lang, available)
+    if chosen and chosen.lower() != lang.lower():
+        log(f"OCR 言語 '{lang}' 未導入 → '{chosen}' にフォールバック (available={available})")
+
     try:
-        # winocr は async API。同期で呼び出すラッパを用意
-        try:
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-            result = loop.run_until_complete(winocr.recognize_pil(img, lang))
-            loop.close()
-        except Exception as e:
-            log(f"OCR lang={lang} 失敗: {e} — 既定ロケールで再試行")
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-            result = loop.run_until_complete(winocr.recognize_pil(img, "en"))
-            loop.close()
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        result = loop.run_until_complete(winocr.recognize_pil(img, chosen))
+        loop.close()
         text = result.get("text", "") if isinstance(result, dict) else getattr(result, "text", "")
         return (text or "").strip()
     except Exception as e:
-        log(f"OCR error: {e}")
+        log(f"OCR error (lang={chosen}): {e}")
         return f"[OCR 失敗: {e}]"
 
 
@@ -801,6 +847,39 @@ class App:
         except Exception as e:
             log(f"open config 失敗: {e}")
 
+    def install_ocr_langs(self, _i=None, _it=None):
+        """OCR 言語パックインストーラ (UAC自己昇格スクリプト) を起動"""
+        script = os.path.join(APP_DIR, "install_ocr_langs.ps1")
+        if not os.path.exists(script):
+            log(f"install_ocr_langs.ps1 が見つかりません: {script}")
+            return
+        try:
+            import subprocess
+            # UAC 昇格はスクリプト側で行う
+            subprocess.Popen(
+                ["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass",
+                 "-File", script],
+                shell=False,
+            )
+        except Exception as e:
+            log(f"OCR言語パック起動失敗: {e}")
+
+    def restart_app(self, _i=None, _it=None):
+        """自分自身を再起動"""
+        log("ユーザー操作で再起動")
+        try:
+            import subprocess
+            pyw = sys.executable
+            # python.exe で起動された場合は pythonw.exe に置換
+            if pyw.lower().endswith("python.exe"):
+                cand = pyw[:-len("python.exe")] + "pythonw.exe"
+                if os.path.exists(cand):
+                    pyw = cand
+            subprocess.Popen([pyw, os.path.join(APP_DIR, "main.py")], shell=False)
+        except Exception as e:
+            log(f"再起動失敗: {e}")
+        self.quit_app()
+
     def quit_app(self, _i=None, _it=None):
         log("終了")
         try:
@@ -827,7 +906,9 @@ class App:
                              self.change_ocr_lang),
             pystray.Menu.SEPARATOR,
             pystray.MenuItem("テスト翻訳", self.test_translate),
+            pystray.MenuItem("OCR 言語パックを導入…", self.install_ocr_langs),
             pystray.MenuItem("設定ファイルを開く", self.open_config),
+            pystray.MenuItem("アプリを再起動", self.restart_app),
             pystray.Menu.SEPARATOR,
             pystray.MenuItem("終了", self.quit_app),
         )
