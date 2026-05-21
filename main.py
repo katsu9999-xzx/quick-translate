@@ -590,51 +590,133 @@ class App:
 
             state = {"recording": False}
 
+            # tkinter keysym → keyboard ライブラリ形式へのマッピング
+            KEYSYM_MAP = {
+                "return": "enter",
+                "prior": "page up",
+                "next": "page down",
+                "escape": "esc",
+                "backspace": "backspace",
+                "tab": "tab",
+                "space": "space",
+                "delete": "delete",
+                "home": "home",
+                "end": "end",
+                "up": "up",
+                "down": "down",
+                "left": "left",
+                "right": "right",
+                "insert": "insert",
+                "minus": "-",
+                "plus": "+",
+                "equal": "=",
+                "comma": ",",
+                "period": ".",
+                "slash": "/",
+                "backslash": "\\",
+                "semicolon": ";",
+                "apostrophe": "'",
+                "bracketleft": "[",
+                "bracketright": "]",
+                "grave": "`",
+            }
+            MODIFIER_KEYSYMS = {
+                "Control_L", "Control_R",
+                "Shift_L", "Shift_R",
+                "Alt_L", "Alt_R",
+                "Meta_L", "Meta_R",
+                "Super_L", "Super_R",
+                "Win_L", "Win_R",
+            }
+
+            def _finish_record(hk: "str | None"):
+                state["recording"] = False
+                try:
+                    dlg.unbind("<KeyPress>")
+                    dlg.unbind_all("<KeyPress>")
+                except Exception:
+                    pass
+                try:
+                    dlg.grab_release()
+                except Exception:
+                    pass
+                # 既存ホットキー復活
+                self.register_hotkeys()
+                try:
+                    entry.config(state="normal")
+                    rec_btn.config(text="キー記録", state="normal")
+                    apply_btn.config(state="normal")
+                except Exception:
+                    pass
+                # ダイアログ側のショートカットを復元
+                dlg.bind("<Return>", apply)
+                dlg.bind("<Escape>", lambda e: dlg.destroy())
+
+                if hk is None:
+                    status_var.set("キャンセルされました — 現在: " + var.get())
+                    return
+                var.set(hk)
+                status_var.set("✔ 記録: " + hk)
+
+            def _on_key(event):
+                if not state["recording"]:
+                    return
+                ks = event.keysym
+                # 修飾キー単独 → 無視 (続きを待つ)
+                if ks in MODIFIER_KEYSYMS:
+                    return "break"
+                # Esc → キャンセル
+                if ks == "Escape":
+                    _finish_record(None)
+                    return "break"
+
+                # 修飾の組み立て (Windows Tk の state ビット)
+                modifiers = []
+                s = event.state
+                if s & 0x4:
+                    modifiers.append("ctrl")
+                if s & 0x20000:
+                    modifiers.append("alt")
+                if s & 0x40000:
+                    if "windows" not in modifiers:
+                        modifiers.append("windows")
+                if s & 0x1:
+                    modifiers.append("shift")
+
+                # メインキー名
+                key = KEYSYM_MAP.get(ks.lower(), ks.lower())
+                if key.startswith("kp_"):
+                    key = key.replace("kp_", "")
+                if len(key) == 1 and key.isalpha():
+                    key = key.lower()
+
+                hk = "+".join(modifiers + [key])
+                _finish_record(hk)
+                return "break"
+
             def start_record():
                 if state["recording"]:
                     return
                 state["recording"] = True
                 status_var.set("⏺ キーを押してください... (Esc でキャンセル)")
                 msg_var.set("")
-                entry.config(state="disabled")
-                rec_btn.config(text="記録中…", state="disabled")
-                apply_btn.config(state="disabled")
+                try:
+                    entry.config(state="disabled")
+                    rec_btn.config(text="記録中…", state="disabled")
+                    apply_btn.config(state="disabled")
+                except Exception:
+                    pass
                 # 既存ホットキーを一時解除して競合回避
                 self._suspend_hotkeys()
-
-                def _read():
-                    captured = None
-                    err = None
-                    try:
-                        captured = keyboard.read_hotkey(suppress=False)
-                    except Exception as e:
-                        err = str(e)
-                    self.popup_manager.root.after(0, lambda: _done(captured, err))
-
-                def _done(hk, err):
-                    # 復帰: ボタン・入力欄・既存ホットキー
-                    state["recording"] = False
-                    try:
-                        entry.config(state="normal")
-                    except Exception:
-                        pass
-                    try:
-                        rec_btn.config(text="キー記録", state="normal")
-                        apply_btn.config(state="normal")
-                    except Exception:
-                        pass
-                    self.register_hotkeys()
-                    if err:
-                        msg_var.set(f"記録失敗: {err}")
-                        status_var.set("現在: " + var.get())
-                        return
-                    if not hk or hk.lower() in ("esc", "escape"):
-                        status_var.set("キャンセルされました — 現在: " + var.get())
-                        return
-                    var.set(hk)
-                    status_var.set("✔ 記録: " + hk)
-
-                threading.Thread(target=_read, daemon=True).start()
+                # ダイアログのキーバインドを記録モードに差し替え
+                dlg.unbind("<Return>")
+                dlg.unbind("<Escape>")
+                try:
+                    dlg.grab_set()
+                except Exception:
+                    pass
+                dlg.focus_force()
+                dlg.bind("<KeyPress>", _on_key)
 
             def apply(_e=None):
                 if state["recording"]:
