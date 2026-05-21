@@ -576,15 +576,15 @@ class App:
         dlg.geometry("+400+260")
 
         tk.Label(dlg, text=title, bg="#1e1e1e", fg="#ffffff",
-                 font=(ff, 12, "bold"), padx=12, pady=10).pack()
+                 font=(ff, 12, "bold"), padx=12).pack(pady=(10, 4))
 
         tk.Label(
             dlg,
             text="「キー記録」を押してから登録したいキーをそのまま押してください\n"
                  "(例: Ctrl+Shift+T / Alt+Q / F8 / Ctrl+Alt+Space)",
             bg="#1e1e1e", fg="#bbbbbb",
-            font=(ff, 9), padx=12, pady=(0, 6), justify="center",
-        ).pack()
+            font=(ff, 9), padx=12, justify="center",
+        ).pack(pady=(0, 6))
 
         var = tk.StringVar(value=self.config[key_name])
         entry = tk.Entry(

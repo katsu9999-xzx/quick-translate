@@ -107,7 +107,7 @@ Write-Step "依存パッケージを pip install"
 Write-Step "デスクトップショートカットを作成"
 $ws = New-Object -ComObject WScript.Shell
 $desk = [Environment]::GetFolderPath('Desktop')
-$lnkD = Join-Path $desk 'クイック翻訳.lnk'
+$lnkD = Join-Path $desk 'QuickTranslate.lnk'
 $l = $ws.CreateShortcut($lnkD)
 $l.TargetPath = $pyw
 $l.Arguments = "`"$InstallDir\main.py`""
