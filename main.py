@@ -540,219 +540,182 @@ class App:
         return img
 
     # --- ホットキー変更ダイアログ ---
+    # tkinter keysym → keyboard ライブラリ形式へのマッピング
+    _KEYSYM_MAP = {
+        "return": "enter", "prior": "page up", "next": "page down",
+        "escape": "esc", "backspace": "backspace", "tab": "tab",
+        "space": "space", "delete": "delete", "home": "home", "end": "end",
+        "up": "up", "down": "down", "left": "left", "right": "right",
+        "insert": "insert", "minus": "-", "plus": "+", "equal": "=",
+        "comma": ",", "period": ".", "slash": "/", "backslash": "\\",
+        "semicolon": ";", "apostrophe": "'", "bracketleft": "[",
+        "bracketright": "]", "grave": "`",
+    }
+    _MODIFIER_KEYSYMS = {
+        "Control_L", "Control_R", "Shift_L", "Shift_R",
+        "Alt_L", "Alt_R", "Meta_L", "Meta_R",
+        "Super_L", "Super_R", "Win_L", "Win_R",
+    }
+
     def _hotkey_dialog(self, key_name: str, title: str):
         def _open():
-            dlg = tk.Toplevel(self.popup_manager.root)
-            dlg.title(title)
-            dlg.attributes("-topmost", True)
-            dlg.configure(bg="#1e1e1e")
-            dlg.geometry("+400+300")
-
-            tk.Label(
-                dlg,
-                text=title,
-                bg="#1e1e1e",
-                fg="#ffffff",
-                font=(self.config["font_family"], 11, "bold"),
-                padx=12,
-                pady=(10, 4),
-            ).pack()
-
-            tk.Label(
-                dlg,
-                text="「キー記録」ボタンを押して、登録したいキーをそのまま押してください\n"
-                     "(例: Ctrl+Shift+T / Alt+Q / Ctrl+Alt+Space)",
-                bg="#1e1e1e",
-                fg="#bbbbbb",
-                font=(self.config["font_family"], 9),
-                padx=12,
-                pady=(0, 6),
-                justify="center",
-            ).pack()
-
-            var = tk.StringVar(value=self.config[key_name])
-            entry = tk.Entry(
-                dlg, textvariable=var,
-                font=(self.config["font_family"], 13, "bold"),
-                width=28, justify="center",
-                bg="#2a2a2a", fg="#ffffff", insertbackground="#ffffff",
-                relief="flat",
-            )
-            entry.pack(padx=12, pady=6, ipady=6)
-
-            status_var = tk.StringVar(value="現在: " + self.config[key_name])
-            tk.Label(dlg, textvariable=status_var, bg="#1e1e1e", fg="#888888",
-                     font=(self.config["font_family"], 9)).pack(pady=(0, 4))
-
-            msg_var = tk.StringVar(value="")
-            tk.Label(dlg, textvariable=msg_var, bg="#1e1e1e", fg="#ff8888",
-                     font=(self.config["font_family"], 9)).pack(pady=(0, 4))
-
-            state = {"recording": False}
-
-            # tkinter keysym → keyboard ライブラリ形式へのマッピング
-            KEYSYM_MAP = {
-                "return": "enter",
-                "prior": "page up",
-                "next": "page down",
-                "escape": "esc",
-                "backspace": "backspace",
-                "tab": "tab",
-                "space": "space",
-                "delete": "delete",
-                "home": "home",
-                "end": "end",
-                "up": "up",
-                "down": "down",
-                "left": "left",
-                "right": "right",
-                "insert": "insert",
-                "minus": "-",
-                "plus": "+",
-                "equal": "=",
-                "comma": ",",
-                "period": ".",
-                "slash": "/",
-                "backslash": "\\",
-                "semicolon": ";",
-                "apostrophe": "'",
-                "bracketleft": "[",
-                "bracketright": "]",
-                "grave": "`",
-            }
-            MODIFIER_KEYSYMS = {
-                "Control_L", "Control_R",
-                "Shift_L", "Shift_R",
-                "Alt_L", "Alt_R",
-                "Meta_L", "Meta_R",
-                "Super_L", "Super_R",
-                "Win_L", "Win_R",
-            }
-
-            def _finish_record(hk: "str | None"):
-                state["recording"] = False
-                try:
-                    dlg.unbind("<KeyPress>")
-                    dlg.unbind_all("<KeyPress>")
-                except Exception:
-                    pass
-                try:
-                    dlg.grab_release()
-                except Exception:
-                    pass
-                # 既存ホットキー復活
-                self.register_hotkeys()
-                try:
-                    entry.config(state="normal")
-                    rec_btn.config(text="キー記録", state="normal")
-                    apply_btn.config(state="normal")
-                except Exception:
-                    pass
-                # ダイアログ側のショートカットを復元
-                dlg.bind("<Return>", apply)
-                dlg.bind("<Escape>", lambda e: dlg.destroy())
-
-                if hk is None:
-                    status_var.set("キャンセルされました — 現在: " + var.get())
-                    return
-                var.set(hk)
-                status_var.set("✔ 記録: " + hk)
-
-            def _on_key(event):
-                if not state["recording"]:
-                    return
-                ks = event.keysym
-                # 修飾キー単独 → 無視 (続きを待つ)
-                if ks in MODIFIER_KEYSYMS:
-                    return "break"
-                # Esc → キャンセル
-                if ks == "Escape":
-                    _finish_record(None)
-                    return "break"
-
-                # 修飾の組み立て (Windows Tk の state ビット)
-                modifiers = []
-                s = event.state
-                if s & 0x4:
-                    modifiers.append("ctrl")
-                if s & 0x20000:
-                    modifiers.append("alt")
-                if s & 0x40000:
-                    if "windows" not in modifiers:
-                        modifiers.append("windows")
-                if s & 0x1:
-                    modifiers.append("shift")
-
-                # メインキー名
-                key = KEYSYM_MAP.get(ks.lower(), ks.lower())
-                if key.startswith("kp_"):
-                    key = key.replace("kp_", "")
-                if len(key) == 1 and key.isalpha():
-                    key = key.lower()
-
-                hk = "+".join(modifiers + [key])
-                _finish_record(hk)
-                return "break"
-
-            def start_record():
-                if state["recording"]:
-                    return
-                state["recording"] = True
-                status_var.set("⏺ キーを押してください... (Esc でキャンセル)")
-                msg_var.set("")
-                try:
-                    entry.config(state="disabled")
-                    rec_btn.config(text="記録中…", state="disabled")
-                    apply_btn.config(state="disabled")
-                except Exception:
-                    pass
-                # 既存ホットキーを一時解除して競合回避
-                self._suspend_hotkeys()
-                # ダイアログのキーバインドを記録モードに差し替え
-                dlg.unbind("<Return>")
-                dlg.unbind("<Escape>")
-                try:
-                    dlg.grab_set()
-                except Exception:
-                    pass
-                dlg.focus_force()
-                dlg.bind("<KeyPress>", _on_key)
-
-            def apply(_e=None):
-                if state["recording"]:
-                    return
-                v = var.get().strip().lower()
-                if not v:
-                    msg_var.set("空にはできません")
-                    return
-                parts = [p.strip() for p in v.replace("-", "+").split("+")]
-                mods = {p for p in parts if p in ("ctrl", "alt", "win", "windows", "cmd")}
-                if not mods:
-                    msg_var.set("Ctrl / Alt / Win いずれかの修飾キーを含めてください")
-                    return
-                try:
-                    h = keyboard.add_hotkey(v, lambda: None)
-                    keyboard.remove_hotkey(h)
-                except Exception as e:
-                    msg_var.set(f"無効な指定: {e}")
-                    return
-                self.config[key_name] = v
-                save_config(self.config)
-                self.register_hotkeys()
-                dlg.destroy()
-
-            btn = tk.Frame(dlg, bg="#1e1e1e")
-            btn.pack(pady=(4, 10), padx=12, fill="x")
-            rec_btn = tk.Button(btn, text="キー記録", width=12, command=start_record)
-            rec_btn.pack(side="left", padx=4)
-            apply_btn = tk.Button(btn, text="適用", width=10, command=apply)
-            apply_btn.pack(side="left", padx=4)
-            tk.Button(btn, text="キャンセル", width=10, command=dlg.destroy).pack(side="right", padx=4)
-
-            dlg.bind("<Return>", apply)
-            dlg.bind("<Escape>", lambda e: (None if state["recording"] else dlg.destroy()))
-
+            try:
+                self._build_hotkey_dialog(key_name, title)
+            except Exception:
+                log("hotkey dialog error: " + traceback.format_exc())
         self.popup_manager.schedule(_open)
+
+    def _build_hotkey_dialog(self, key_name: str, title: str):
+        ff = self.config["font_family"]
+
+        dlg = tk.Toplevel(self.popup_manager.root)
+        dlg.title(title)
+        dlg.attributes("-topmost", True)
+        dlg.configure(bg="#1e1e1e")
+        dlg.minsize(420, 280)
+        dlg.geometry("+400+260")
+
+        tk.Label(dlg, text=title, bg="#1e1e1e", fg="#ffffff",
+                 font=(ff, 12, "bold"), padx=12, pady=10).pack()
+
+        tk.Label(
+            dlg,
+            text="「キー記録」を押してから登録したいキーをそのまま押してください\n"
+                 "(例: Ctrl+Shift+T / Alt+Q / F8 / Ctrl+Alt+Space)",
+            bg="#1e1e1e", fg="#bbbbbb",
+            font=(ff, 9), padx=12, pady=(0, 6), justify="center",
+        ).pack()
+
+        var = tk.StringVar(value=self.config[key_name])
+        entry = tk.Entry(
+            dlg, textvariable=var,
+            font=(ff, 13, "bold"), width=30, justify="center",
+            bg="#2a2a2a", fg="#ffffff", insertbackground="#ffffff",
+            relief="flat",
+        )
+        entry.pack(padx=12, pady=8, ipady=6)
+
+        status_var = tk.StringVar(value="現在: " + self.config[key_name])
+        tk.Label(dlg, textvariable=status_var, bg="#1e1e1e", fg="#888888",
+                 font=(ff, 9)).pack(pady=(0, 4))
+
+        msg_var = tk.StringVar(value="")
+        tk.Label(dlg, textvariable=msg_var, bg="#1e1e1e", fg="#ff8888",
+                 font=(ff, 9)).pack(pady=(0, 4))
+
+        state = {"recording": False}
+
+        def _finish_record(hk):
+            state["recording"] = False
+            try:
+                dlg.unbind("<KeyPress>")
+            except Exception:
+                pass
+            try:
+                dlg.grab_release()
+            except Exception:
+                pass
+            self.register_hotkeys()
+            try:
+                entry.config(state="normal")
+                rec_btn.config(text="キー記録", state="normal")
+                apply_btn.config(state="normal")
+            except Exception:
+                pass
+            dlg.bind("<Return>", apply)
+            dlg.bind("<Escape>", lambda e: dlg.destroy())
+            if hk is None:
+                status_var.set("キャンセルされました — 現在: " + var.get())
+                return
+            var.set(hk)
+            status_var.set("✔ 記録: " + hk)
+
+        def _on_key(event):
+            if not state["recording"]:
+                return
+            ks = event.keysym
+            if ks in self._MODIFIER_KEYSYMS:
+                return "break"
+            if ks == "Escape":
+                _finish_record(None)
+                return "break"
+            modifiers = []
+            s = event.state
+            if s & 0x4:
+                modifiers.append("ctrl")
+            if s & 0x20000:
+                modifiers.append("alt")
+            if s & 0x40000 and "windows" not in modifiers:
+                modifiers.append("windows")
+            if s & 0x1:
+                modifiers.append("shift")
+            key = self._KEYSYM_MAP.get(ks.lower(), ks.lower())
+            if key.startswith("kp_"):
+                key = key.replace("kp_", "")
+            if len(key) == 1 and key.isalpha():
+                key = key.lower()
+            hk = "+".join(modifiers + [key])
+            _finish_record(hk)
+            return "break"
+
+        def start_record():
+            if state["recording"]:
+                return
+            state["recording"] = True
+            status_var.set("⏺ キーを押してください… (Esc でキャンセル)")
+            msg_var.set("")
+            try:
+                entry.config(state="disabled")
+                rec_btn.config(text="記録中…", state="disabled")
+                apply_btn.config(state="disabled")
+            except Exception:
+                pass
+            self._suspend_hotkeys()
+            dlg.unbind("<Return>")
+            dlg.unbind("<Escape>")
+            try:
+                dlg.grab_set()
+            except Exception:
+                pass
+            dlg.focus_force()
+            dlg.bind("<KeyPress>", _on_key)
+
+        def apply(_e=None):
+            if state["recording"]:
+                return
+            v = var.get().strip().lower()
+            if not v:
+                msg_var.set("空にはできません")
+                return
+            parts = [p.strip() for p in v.replace("-", "+").split("+")]
+            mods = {p for p in parts if p in ("ctrl", "alt", "win", "windows", "cmd")}
+            if not mods:
+                msg_var.set("Ctrl / Alt / Win いずれかの修飾キーを含めてください")
+                return
+            try:
+                h = keyboard.add_hotkey(v, lambda: None)
+                keyboard.remove_hotkey(h)
+            except Exception as e:
+                msg_var.set(f"無効な指定: {e}")
+                return
+            self.config[key_name] = v
+            save_config(self.config)
+            self.register_hotkeys()
+            dlg.destroy()
+
+        btn = tk.Frame(dlg, bg="#1e1e1e")
+        btn.pack(pady=(6, 14), padx=12, fill="x")
+        rec_btn = tk.Button(btn, text="キー記録", width=12, command=start_record)
+        rec_btn.pack(side="left", padx=4)
+        apply_btn = tk.Button(btn, text="適用", width=10, command=apply)
+        apply_btn.pack(side="left", padx=4)
+        tk.Button(btn, text="キャンセル", width=10, command=dlg.destroy).pack(side="right", padx=4)
+
+        dlg.bind("<Return>", apply)
+        dlg.bind("<Escape>", lambda e: (None if state["recording"] else dlg.destroy()))
+
+        dlg.update_idletasks()
+        dlg.focus_force()
 
     def _suspend_hotkeys(self):
         """記録中のみホットキーを一時解除 (記録後 register_hotkeys で復活)"""
