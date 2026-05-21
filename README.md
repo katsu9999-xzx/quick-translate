@@ -2,6 +2,26 @@
 
 Windows 常駐型の翻訳ポップアップツール。
 
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+
+## 他PCへのインストール (1行)
+
+PowerShell をユーザー権限で起動し、次の1行を貼り付けて実行:
+
+```powershell
+irm https://raw.githubusercontent.com/katsu9999-xzx/quick-translate/main/install.ps1 | iex
+```
+
+これだけで:
+1. Python 3.13 を検出 (無ければ winget で導入を試行)
+2. `%LOCALAPPDATA%\Programs\QuickTranslate\` に展開
+3. 依存パッケージを pip install
+4. デスクトップに「クイック翻訳」ショートカット作成
+5. Windows スタートアップに登録 (次回ログイン以降は自動起動)
+6. すぐに起動
+
+完了後、`Alt+Q` で翻訳、`Ctrl+Shift+S` で範囲スクショ翻訳が使えます。
+
 ## 機能
 
 - **テキスト翻訳ホットキー** (既定 `Alt+Q`)
